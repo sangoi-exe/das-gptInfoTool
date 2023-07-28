@@ -1,0 +1,18 @@
+{
+	"update_url": "https://clients2.google.com/service/update2/crx",
+	"manifest_version": 3,
+	"name": "GPT Chat Tool",
+	"description": "Faz contagem de tokens, mensagens e registra o intervalo de 3h do ChatGPT Plus",
+	"version": "1.0.0",
+	"permissions": ["activeTab", "scripting", "storage"],
+	"host_permissions": ["*://chat.openai.com/*"],
+	"background": {
+		"service_worker": "./background/background.js"
+	},
+	"content_scripts": [
+		{
+			"matches": ["*://chat.openai.com/*"],
+			"js": ["./content.js"]
+		}
+	]
+}
