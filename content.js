@@ -4,78 +4,113 @@ let gptModel = null;
 let chatModel = null;
 let messageCount = 0;
 let tokenCounts = {};
+const gpt4Models = ['gpt-4', 'gpt-4-plugins', 'gpt-4-code-interpreter'];
 
 async function main() {
-	window.addEventListener(
-		"message",
-		async (event) => {
-			if (event.source != window) {
-				return;
-			}
-			if (event.data.source && event.data.source == "Tampermonkey") {
-				switch (event.data.data) {
-					case "messageSent":
-						await getMessage();
-						await updateInfoDisplay();
-						break;
-					case "existingChat":
-						await getChatInfo();
-						await updateInfoDisplay();
-						break;
-					case "newChat":
-						await getChatInfo();
-						await getMessage();
-						break;
-				}
-			}
-		},
-		false
-	);
+	window.addEventListener("message", async (event) => {
+		if (event.source != window) {
+			return;
+		}
+
+		if (event.data.source && event.data.source == "Tampermonkey") {
+			await getChatInfo();
+			await updateInfoDisplay();
+		}
+	});
 }
 
 async function getChatInfo() {
-	let apiChatId = window.localStorage.getItem("_apiChatId");
-	let splitFetch;
-
-	if (apiChatId.includes("/conversation/gen_title/")) {
-		splitFetch = apiChatId.split("conversation/gen_title/");
-	} else {
-		splitFetch = apiChatId.split("/conversation/");
-	}
-
-	pageId = splitFetch[1];
-
-	gptModel = window.localStorage.getItem("_lastModelUsed");
-	localStorage.setItem(`_model_${pageId}`, gptModel);
-	chatModel = localStorage.getItem(`_model_${pageId}`);
-	startTime = localStorage.getItem("_startTime");
-
-	await registerFirstMessageTime();
-}
-
-async function getMessage() {
-	let lastUserMsg = window.localStorage.getItem("_lastUserMsg");
-
+	pageId = window.localStorage.getItem("[das]_apiChatId");
+	gptModel = window.localStorage.getItem("[das]_lastModelUsed");
+	localStorage.setItem(`[das]_model_${pageId}`, gptModel);
+	chatModel = localStorage.getItem(`[das]_model_${pageId}`);
 	await checkTimeInterval();
-	await registerMessageSent(lastUserMsg);
+	await registerFirstMessageTime();
+	await registerMessageSent();
 }
 
 async function registerFirstMessageTime() {
-	if (startTime === null && chatModel == "gpt-4") {
+	if (startTime === null && gpt4Models.includes(chatModel)) {
 		startTime = new Date().toISOString();
-		localStorage.setItem("_startTime", startTime);
+		localStorage.setItem("[das]_capStartTime", startTime);
+	} else {
+		return;
 	}
 }
 
-async function registerMessageSent(message) {
-	if (chatModel == "gpt-4") {
-		messageCount++;
-		localStorage.setItem(`_messageCount`, messageCount);
+async function checkTimeInterval() {
+	if (gpt4Models.includes(chatModel)) {
+		if (localStorage.getItem("[das]_capStartTime")) {
+			startTime = new Date(localStorage.getItem("[das]_capStartTime"));
+		} else {
+			startTime = new Date();
+			localStorage.setItem("[das]_capStartTime", startTime.toISOString());
+		}
+
+		if (!startTime) {
+			return;
+		}
+
+		let currentTime = new Date();
+		let timeDiff = currentTime.getTime() - startTime.getTime();
+		let timeDiffInHours = Math.abs(timeDiff) / (1000 * 60 * 60);
+
+		if (timeDiffInHours >= 3) {
+			await resetCounts();
+		}
+	} else {
+		return;
 	}
-	let tokenCount = await countTokens(message);
-	tokenCounts[pageId] = (tokenCounts[pageId] || 0) + tokenCount;
-	localStorage.setItem(`_tokenCounts_${pageId}`, JSON.stringify(tokenCounts));
-	updateInfoDisplay();
+}
+
+async function registerMessageSent() {
+	if (localStorage.getItem("[das]_messageCount")) {
+		messageCount = localStorage.getItem("[das]_messageCount");
+	} else {
+		localStorage.setItem("[das]_messageCount", messageCount);
+	}
+
+	if (gpt4Models.includes(chatModel)) {
+		messageCount++;
+		localStorage.setItem(`[das]_messageCount`, messageCount);
+	}
+
+	let lastUserMsg = window.localStorage.getItem("[das]_lastUserMsg");
+	let userTokens = await countTokens(lastUserMsg);
+	tokenCounts[pageId] = (tokenCounts[pageId] || 0) + userTokens;
+	localStorage.setItem(`[das]_tokenCounts_${pageId}`, JSON.stringify(tokenCounts));
+
+	let apiFullMsg = window.localStorage.getItem("[das]_apiFullMsg");
+	let apiTokens = await countTokens(apiFullMsg);
+	tokenCounts[pageId] = (tokenCounts[pageId] || 0) + apiTokens;
+
+	localStorage.setItem(`[das]_tokenCounts_${pageId}`, JSON.stringify(tokenCounts));
+}
+
+async function updateInfoDisplay() {
+	messageCount = parseInt(localStorage.getItem(`[das]_messageCount`)) || 0;
+	tokenCounts = JSON.parse(localStorage.getItem(`[das]_tokenCounts_${pageId}`)) || {};
+	let infoDisplay = document.querySelector("#info-display");
+
+	if (!infoDisplay) {
+		infoDisplay = document.createElement("div");
+		infoDisplay.id = "info-display";
+		infoDisplay.className = "flex flex-col relative justify-end h-auto text-xs pb-1.5";
+		let textArea = document.querySelector('[role="presentation"]');
+		textArea.insertAdjacentElement("afterend", infoDisplay);
+	}
+
+	if (gpt4Models.includes(chatModel)) {
+		if (startTime != null) {
+			infoDisplay.innerText = `Start Time: ${formatDateTime(startTime)}\nMessage Count: ${messageCount}\nToken Count: ${
+				tokenCounts[pageId] || 0
+			}`;
+		} else {
+			infoDisplay.innerText = `Start Time: -\nMessage Count: ${messageCount}\nToken Count: ${tokenCounts[pageId] || 0}`;
+		}
+	} else {
+		infoDisplay.innerText = `Start Time: -\nMessage Count: -\nToken Count: ${tokenCounts[pageId] || 0}`;
+	}
 }
 
 async function countTokens(message) {
@@ -86,58 +121,19 @@ async function countTokens(message) {
 	});
 }
 
-async function checkTimeInterval() {
-	if (startTime === null) {
-		return;
-	}
-	let currentTime = new Date();
-	let timeDiff = currentTime - new Date(startTime);
-	let timeDiffInHours = timeDiff / (1000 * 60 * 60);
-	if (timeDiffInHours >= 3 && chatModel == "gpt-4") {
-		resetCounts();
-	}
-}
-
-function resetCounts() {
+async function resetCounts() {
 	startTime = null;
 	messageCount = 0;
-	tokenCounts = {};
-	localStorage.setItem("_startTime", startTime);
-	localStorage.setItem(`_messageCount`, messageCount);
-	localStorage.setItem(`_tokenCounts_${pageId}`, JSON.stringify(tokenCounts));
+	localStorage.setItem("[das]_capStartTime", startTime);
+	localStorage.setItem(`[das]_messageCount`, messageCount);
 }
 
 function formatDateTime(dateTimeString) {
 	let date = new Date(dateTimeString);
-	let hour = ("0" + (date.getUTCHours() - 3)).slice(-2);
-	let minute = ("0" + date.getUTCMinutes()).slice(-2);
-
-	return `${hour}:${minute}`;
+	return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-async function updateInfoDisplay() {	
-	messageCount = parseInt(localStorage.getItem(`_messageCount`)) || 0;
-	tokenCounts = JSON.parse(localStorage.getItem(`_tokenCounts_${pageId}`)) || {};
-
-	let infoDisplay = document.querySelector("#info-display");
-
-	if (!infoDisplay) {
-		infoDisplay = document.createElement("div");
-		infoDisplay.id = "info-display";
-		infoDisplay.className = "flex flex-col relative justify-end h-auto text-xs pb-1.5";
-		let textArea = document.querySelector('[role="presentation"]');
-		textArea.insertAdjacentElement("afterend", infoDisplay);
-	}
-	if (chatModel == "gpt-4") {
-		infoDisplay.innerText = `Start Time: ${formatDateTime(startTime)}\nMessage Count: ${messageCount}\nToken Count: ${
-			tokenCounts[pageId] || 0
-		}`;
-	} else {
-		infoDisplay.innerText = `Start Time: -\nMessage Count: -\nToken Count: ${tokenCounts[pageId] || 0}`;
-	}
-}
-
-function objectComparison(obj1, obj2) {
+/*function objectComparison(obj1, obj2) {
 	const result = {};
 
 	for (let key in obj1) {
@@ -147,6 +143,6 @@ function objectComparison(obj1, obj2) {
 	}
 
 	return result;
-}
+}*/
 
 main();
