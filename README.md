@@ -1,5 +1,5 @@
 # das-gptInfoTool
-Tampermonkey Script+Chrome extension for ChatGPT Plus users to track the GPT4 cap time, total messages, and token count in conversations.
+(in development) Tampermonkey Script+Chrome extension for ChatGPT Plus users to track the GPT4 cap time, total messages, and token count in conversations.
 
 This work is licensed under a
 [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License][cc-by-nc-sa].
