@@ -1,15 +1,14 @@
-let pageId = null,
-	startTime = null,
-	gptModel = null,
-	chatModel = null,
-	infoDisplay = null,
-	modelUrl = null;
-
+let pageId = null;
+let startTime = null;
+let gptModel = null;
+let chatModel = null;
+let infoDisplay = null;
+let modelUrl = null;
 let messageCount = 0;
 let tokenCounts = {};
 const gpt4Models = ["gpt-4", "gpt-4-plugins", "gpt-4-code-interpreter"];
 let modelTokenLimits = {
-	"gpt-4": 4095,
+	"gpt-4": 6536,
 	"gpt-4-code-interpreter": 8192,
 	"gpt-4-plugins": 8192,
 	"text-davinci-002-render-sha": 8191,
@@ -17,17 +16,13 @@ let modelTokenLimits = {
 
 async function main() {
 	window.addEventListener("message", async (event) => {
-		if (event.source !== window || event.data.source !== "Tampermonkey") {
+		if (event.source != window) {
 			return;
 		}
 
-		switch (event.data.data) {
-			case "urlWithGet":
-				await urlInGet();
-				break;
-			case "fetchDone":
-				await getChatInfo();
-				break;
+		if (event.data.source && event.data.source == "Tampermonkey") {
+			await getChatInfo();
+			await updateInfoDisplay();
 		}
 	});
 }
@@ -42,27 +37,12 @@ async function getChatInfo() {
 	await registerMessageSent();
 }
 
-async function urlInGet() {
-	let getUrl = window.localStorage.getItem("[das]_apiUrlId");
-	let splitUrl = getUrl.split("/conversation/");
-	pageId = splitUrl[1];
-}
-
 async function registerFirstMessageTime() {
 	if (startTime === null && gpt4Models.includes(chatModel)) {
 		startTime = new Date().toISOString();
 		localStorage.setItem("[das]_capStartTime", startTime);
 	} else {
 		return;
-	}
-}
-
-async function registerFirstMessageTime() {
-	if (startTime !== null && !gpt4Models.includes(chatModel)) {
-		return;
-	} else {
-		startTime = new Date().toISOString();
-		localStorage.setItem("[das]_capStartTime", startTime);
 	}
 }
 
@@ -107,24 +87,25 @@ async function registerMessageSent() {
 	let userTokens = await countTokens(lastUserMsg);
 	tokenCounts[pageId] = (tokenCounts[pageId] || 0) + userTokens;
 	localStorage.setItem(`[das]_tokenCounts_${pageId}`, JSON.stringify(tokenCounts));
-	console.log("Page ID:", pageId, "Url:", window.location.href)
 
 	let apiFullMsg = window.localStorage.getItem("[das]_apiFullMsg");
 	let apiTokens = await countTokens(apiFullMsg);
 	tokenCounts[pageId] = (tokenCounts[pageId] || 0) + apiTokens;
-	console.log("Page ID:", pageId, "Url:", window.location.href)
+
 	localStorage.setItem(`[das]_tokenCounts_${pageId}`, JSON.stringify(tokenCounts));
-	await updateInfoDisplay();
 }
 
 async function updateInfoDisplay() {
 	messageCount = parseInt(localStorage.getItem(`[das]_messageCount`)) || 0;
 	tokenCounts = JSON.parse(localStorage.getItem(`[das]_tokenCounts_${pageId}`)) || {};
+	infoDisplay = document.querySelector("#info-display");
 
-	await createInfoDisplay();
+	if (!infoDisplay) {
+		await createInfoDisplay();
+	}
 
 	if (gpt4Models.includes(chatModel)) {
-		if (startTime !== null) {
+		if (startTime != null) {
 			infoDisplay.innerHTML = `Start Time: ${formatDateTime(
 				startTime
 			)}<br>Message Count: ${messageCount}<br>Total Tokens: ${
@@ -143,20 +124,15 @@ async function updateInfoDisplay() {
 }
 
 async function createInfoDisplay() {
-	infoDisplay = document.querySelector("#info-display");
-	if (infoDisplay) {
-		return;
-	} else {
-		infoDisplay = document.createElement("div");
-		infoDisplay.innerHTML = `Start Time: -<br>Message Count: -<br>Total Tokens: ${
-			tokenCounts[pageId] || 0
-		}<br><span id="das-token">Tokens Count: -</span>`;
-		infoDisplay.id = "info-display";
-		infoDisplay.className = "flex flex-col relative justify-end h-auto text-xs pb-0";
+	infoDisplay = document.createElement("div");
+	infoDisplay.innerHTML = `Start Time: -<br>Message Count: -<br>Total Tokens: ${
+		tokenCounts[pageId] || 0
+	}<br><span id="das-token">Tokens Count: -</span>`;
+	infoDisplay.id = "info-display";
+	infoDisplay.className = "flex flex-col relative justify-end h-auto text-xs pb-0";
 
-		let textArea = document.querySelector('[role="presentation"]');
-		textArea.insertAdjacentElement("afterend", infoDisplay);
-	}
+	let textArea = document.querySelector('[role="presentation"]');
+	textArea.insertAdjacentElement("afterend", infoDisplay);
 }
 
 async function countTokens(message) {
@@ -179,24 +155,27 @@ function formatDateTime(dateTimeString) {
 	return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+/*function objectComparison(obj1, obj2) {
+	const result = {};
+
+	for (let key in obj1) {
+		if (!(key in obj2)) {
+			result[key] = obj1[key];
+		}
+	}
+
+	return result;
+}*/
+
 async function checkModelUrl() {
 	modelUrl = window.location.href;
-	if (modelUrl.includes("model=")) {
-		let splitFetch = modelUrl.split("model=");
+	let splitFetch = modelUrl.split("model=");
+	if (splitFetch[1]) {
 		chatModel = splitFetch[1];
-	} else if (modelUrl === "https://chat.openai.com/") {
+		console.log(chatModel);
+	} else {
 		chatModel = "text-davinci-002-render-sha";
-	} else if (modelUrl.includes("/c/")) {
-		return;
-	}
-}
-
-function loadCheck() {
-	console.log("loadCheck")
-	let tabUrl = window.location.href;
-	if (tabUrl.includes("/c/")) {
-		let splitUrl = tabUrl.split("/c/");
-		pageId = splitUrl[1];
+		console.log(chatModel);
 	}
 }
 
@@ -204,16 +183,12 @@ let modelCheck = new MutationObserver(async function (mutations) {
 	let newModelUrl = window.location.href;
 	if (newModelUrl !== modelUrl) {
 		await checkModelUrl();
-
-		if (mainObserver && mainObserver.disconnect) {
-			mainObserver.observe(document, { childList: true, subtree: true });
-		}
 	}
 });
 
 modelCheck.observe(document.body, { childList: true, subtree: true });
 
-let mainObserver = new MutationObserver((mutationsList, observer) => {
+let observer = new MutationObserver((mutationsList, observer) => {
 	let textArea = document.querySelector("#prompt-textarea");
 	let formPrompt = document.querySelector("form.stretch");
 	let tokenLimit = modelTokenLimits[chatModel];
@@ -222,6 +197,7 @@ let mainObserver = new MutationObserver((mutationsList, observer) => {
 	if (textArea && formPrompt) {
 		createInfoDisplay();
 		let tokenTag = document.querySelector("#das-token");
+		console.log("Os elementos foram adicionados ao DOM");
 		textArea.addEventListener("input", async function () {
 			if (textArea.value.length >= 1) {
 				tokenCount = await countTokens(textArea.value);
@@ -237,22 +213,27 @@ let mainObserver = new MutationObserver((mutationsList, observer) => {
 			}
 		});
 
-		formPrompt.addEventListener("keydown", function (event) {
+		formPrompt.addEventListener("keydown", async function (event) {
 			if (event.key === "Enter" && !event.shiftKey) {
 				if (textArea.value.length > 1) {
 					if (tokenCount > tokenLimit) {
+						let lastPrompt = textArea.value;
+						console.log("Piroca grossa");
 						event.stopImmediatePropagation();
+						textArea.value = lastPrompt;
+						tokenCount = await countTokens(lastPrompt);
 					}
 				}
 			}
 		});
 
-		mainObserver.disconnect();
+		observer.disconnect();
+
+		console.log("Os listeners foram adicioados nessa buceta");
 	}
 });
 
-mainObserver.observe(document.body, { childList: true, subtree: true });
+observer.observe(document.body, { childList: true, subtree: true });
 
-loadCheck()
-checkModelUrl();
 main();
+checkModelUrl();
