@@ -6,6 +6,7 @@ let pageId = null,
 	modelUrl = null;
 
 let messageCount = 0;
+let tokenCount = 0;
 let tokenCounts = {};
 const gpt4Models = ["gpt-4", "gpt-4-plugins", "gpt-4-code-interpreter"];
 let modelTokenLimits = {
@@ -107,12 +108,12 @@ async function registerMessageSent() {
 	let userTokens = await countTokens(lastUserMsg);
 	tokenCounts[pageId] = (tokenCounts[pageId] || 0) + userTokens;
 	localStorage.setItem(`[das]_tokenCounts_${pageId}`, JSON.stringify(tokenCounts));
-	console.log("Page ID:", pageId, "Url:", window.location.href)
+	console.log("Page ID:", pageId, "Url:", window.location.href);
 
 	let apiFullMsg = window.localStorage.getItem("[das]_apiFullMsg");
 	let apiTokens = await countTokens(apiFullMsg);
 	tokenCounts[pageId] = (tokenCounts[pageId] || 0) + apiTokens;
-	console.log("Page ID:", pageId, "Url:", window.location.href)
+	console.log("Page ID:", pageId, "Url:", window.location.href);
 	localStorage.setItem(`[das]_tokenCounts_${pageId}`, JSON.stringify(tokenCounts));
 	await updateInfoDisplay();
 }
@@ -143,7 +144,7 @@ async function updateInfoDisplay() {
 }
 
 async function createInfoDisplay() {
-	infoDisplay = document.querySelector("#info-display");
+	let infoDisplay = document.querySelector("#info-display");
 	if (infoDisplay) {
 		return;
 	} else {
@@ -192,7 +193,7 @@ async function checkModelUrl() {
 }
 
 function loadCheck() {
-	console.log("loadCheck")
+	console.log("loadCheck");
 	let tabUrl = window.location.href;
 	if (tabUrl.includes("/c/")) {
 		let splitUrl = tabUrl.split("/c/");
@@ -217,10 +218,8 @@ let mainObserver = new MutationObserver((mutationsList, observer) => {
 	let textArea = document.querySelector("#prompt-textarea");
 	let formPrompt = document.querySelector("form.stretch");
 	let tokenLimit = modelTokenLimits[chatModel];
-	let tokenCount = 0;
-
-	if (textArea && formPrompt) {
-		createInfoDisplay();
+	createInfoDisplay();
+	if (textArea && formPrompt) {		
 		let tokenTag = document.querySelector("#das-token");
 		textArea.addEventListener("input", async function () {
 			if (textArea.value.length >= 1) {
@@ -232,7 +231,7 @@ let mainObserver = new MutationObserver((mutationsList, observer) => {
 				} else {
 					textArea.style.color = "white";
 				}
-			} else {
+			} else if (textArea.value.length === 0) {
 				tokenTag.innerText = "Tokens Count: 0";
 			}
 		});
@@ -253,6 +252,6 @@ let mainObserver = new MutationObserver((mutationsList, observer) => {
 
 mainObserver.observe(document.body, { childList: true, subtree: true });
 
-loadCheck()
+loadCheck();
 checkModelUrl();
 main();
