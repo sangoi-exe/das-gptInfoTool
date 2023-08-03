@@ -27,20 +27,20 @@ async function main() {
 				await urlInGet();
 				break;
 			case "fetchDone":
-				await getChatInfo();
+				await handleChatInfo();
 				break;
 		}
 	});
 }
 
-async function getChatInfo() {
+async function handleChatInfo() {
 	pageId = window.localStorage.getItem("[das]_apiChatId");
 	gptModel = window.localStorage.getItem("[das]_lastModelUsed");
 	localStorage.setItem(`[das]_model_${pageId}`, gptModel);
 	chatModel = localStorage.getItem(`[das]_model_${pageId}`);
-	await checkTimeInterval();
-	await registerFirstMessageTime();
-	await registerMessageSent();
+	await checkCapInterval();
+	await handleCapStartTime();
+	await handleSentMessage();
 }
 
 async function urlInGet() {
@@ -49,16 +49,7 @@ async function urlInGet() {
 	pageId = splitUrl[1];
 }
 
-async function registerFirstMessageTime() {
-	if (startTime === null && gpt4Models.includes(chatModel)) {
-		startTime = new Date().toISOString();
-		localStorage.setItem("[das]_capStartTime", startTime);
-	} else {
-		return;
-	}
-}
-
-async function registerFirstMessageTime() {
+async function handleCapStartTime() {
 	if (startTime !== null && !gpt4Models.includes(chatModel)) {
 		return;
 	} else {
@@ -67,7 +58,7 @@ async function registerFirstMessageTime() {
 	}
 }
 
-async function checkTimeInterval() {
+async function checkCapInterval() {
 	if (gpt4Models.includes(chatModel)) {
 		if (localStorage.getItem("[das]_capStartTime")) {
 			startTime = new Date(localStorage.getItem("[das]_capStartTime"));
@@ -92,7 +83,7 @@ async function checkTimeInterval() {
 	}
 }
 
-async function registerMessageSent() {
+async function handleSentMessage() {
 	if (localStorage.getItem("[das]_messageCount")) {
 		messageCount = localStorage.getItem("[das]_messageCount");
 	} else {
@@ -108,12 +99,10 @@ async function registerMessageSent() {
 	let userTokens = await countTokens(lastUserMsg);
 	tokenCounts[pageId] = (tokenCounts[pageId] || 0) + userTokens;
 	localStorage.setItem(`[das]_tokenCounts_${pageId}`, JSON.stringify(tokenCounts));
-	console.log("Page ID:", pageId, "Url:", window.location.href);
 
 	let apiFullMsg = window.localStorage.getItem("[das]_apiFullMsg");
 	let apiTokens = await countTokens(apiFullMsg);
 	tokenCounts[pageId] = (tokenCounts[pageId] || 0) + apiTokens;
-	console.log("Page ID:", pageId, "Url:", window.location.href);
 	localStorage.setItem(`[das]_tokenCounts_${pageId}`, JSON.stringify(tokenCounts));
 	await updateInfoDisplay();
 }
@@ -122,7 +111,7 @@ async function updateInfoDisplay() {
 	messageCount = parseInt(localStorage.getItem(`[das]_messageCount`)) || 0;
 	tokenCounts = JSON.parse(localStorage.getItem(`[das]_tokenCounts_${pageId}`)) || {};
 
-	await createInfoDisplay();
+	await handleInfoDisplay();
 
 	if (gpt4Models.includes(chatModel)) {
 		if (startTime !== null) {
@@ -141,23 +130,23 @@ async function updateInfoDisplay() {
 			tokenCounts[pageId] || 0
 		}<br><span id="das-token">Tokens Count: 0</span>`;
 	}
+	mainObserver.observe(document.body, { childList: true, subtree: true });
 }
 
-async function createInfoDisplay() {
-	let infoDisplay = document.querySelector("#info-display");
+async function handleInfoDisplay() {
+	infoDisplay = document.querySelector("#info-display");
 	if (infoDisplay) {
 		return;
-	} else {
-		infoDisplay = document.createElement("div");
-		infoDisplay.innerHTML = `Start Time: -<br>Message Count: -<br>Total Tokens: ${
-			tokenCounts[pageId] || 0
-		}<br><span id="das-token">Tokens Count: -</span>`;
-		infoDisplay.id = "info-display";
-		infoDisplay.className = "flex flex-col relative justify-end h-auto text-xs pb-0";
-
-		let textArea = document.querySelector('[role="presentation"]');
-		textArea.insertAdjacentElement("afterend", infoDisplay);
 	}
+	infoDisplay = document.createElement("div");
+	infoDisplay.innerHTML = `Start Time: -<br>Message Count: -<br>Total Tokens: ${
+		tokenCounts[pageId] || 0
+	}<br><span id="das-token">Tokens Count: -</span>`;
+	infoDisplay.id = "info-display";
+	infoDisplay.className = "flex flex-col relative justify-end h-auto text-xs pb-0";
+
+	let textArea = document.querySelector('[role="presentation"]');
+	textArea.insertAdjacentElement("afterend", infoDisplay);
 }
 
 async function countTokens(message) {
@@ -192,23 +181,10 @@ async function checkModelUrl() {
 	}
 }
 
-function loadCheck() {
-	console.log("loadCheck");
-	let tabUrl = window.location.href;
-	if (tabUrl.includes("/c/")) {
-		let splitUrl = tabUrl.split("/c/");
-		pageId = splitUrl[1];
-	}
-}
-
 let modelCheck = new MutationObserver(async function (mutations) {
 	let newModelUrl = window.location.href;
 	if (newModelUrl !== modelUrl) {
 		await checkModelUrl();
-
-		if (mainObserver && mainObserver.disconnect) {
-			mainObserver.observe(document, { childList: true, subtree: true });
-		}
 	}
 });
 
@@ -218,13 +194,13 @@ let mainObserver = new MutationObserver((mutationsList, observer) => {
 	let textArea = document.querySelector("#prompt-textarea");
 	let formPrompt = document.querySelector("form.stretch");
 	let tokenLimit = modelTokenLimits[chatModel];
-	createInfoDisplay();
-	if (textArea && formPrompt) {		
-		let tokenTag = document.querySelector("#das-token");
+	handleInfoDisplay();
+	if (textArea && formPrompt) {
+		let tokenTag = document.querySelector("span#das-token");
 		textArea.addEventListener("input", async function () {
-			if (textArea.value.length >= 1) {
+			if (textArea.value.length !== 0) {
 				tokenCount = await countTokens(textArea.value);
-				tokenTag.innerText = "Tokens Count: " + tokenCount;
+				tokenTag.innerHTML = "Tokens Count: " + tokenCount;
 
 				if (tokenCount > tokenLimit) {
 					textArea.style.color = "red";
@@ -251,6 +227,14 @@ let mainObserver = new MutationObserver((mutationsList, observer) => {
 });
 
 mainObserver.observe(document.body, { childList: true, subtree: true });
+
+function loadCheck() {
+	let tabUrl = window.location.href;
+	if (tabUrl.includes("/c/")) {
+		let splitUrl = tabUrl.split("/c/");
+		pageId = splitUrl[1];
+	}
+}
 
 loadCheck();
 checkModelUrl();
