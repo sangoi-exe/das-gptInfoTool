@@ -25,6 +25,7 @@ async function main() {
 		switch (event.data.data) {
 			case "urlWithGet":
 				await urlInGet();
+				await handleInfoDisplay();
 				break;
 			case "fetchDone":
 				await handleChatInfo();
@@ -38,8 +39,7 @@ async function handleChatInfo() {
 	gptModel = window.localStorage.getItem("[das]_lastModelUsed");
 	localStorage.setItem(`[das]_model_${pageId}`, gptModel);
 	chatModel = localStorage.getItem(`[das]_model_${pageId}`);
-	await checkCapInterval();
-	await handleCapStartTime();
+	await handleCapTime();
 	await handleSentMessage();
 }
 
@@ -49,37 +49,24 @@ async function urlInGet() {
 	pageId = splitUrl[1];
 }
 
-async function handleCapStartTime() {
-	if (startTime !== null && !gpt4Models.includes(chatModel)) {
+async function handleCapTime() {
+	// We only care about GPT4 models
+	if (!gpt4Models.includes(chatModel)) {
 		return;
-	} else {
-		startTime = new Date().toISOString();
-		localStorage.setItem("[das]_capStartTime", startTime);
 	}
-}
 
-async function checkCapInterval() {
-	if (gpt4Models.includes(chatModel)) {
-		if (localStorage.getItem("[das]_capStartTime")) {
-			startTime = new Date(localStorage.getItem("[das]_capStartTime"));
-		} else {
-			startTime = new Date();
-			localStorage.setItem("[das]_capStartTime", startTime.toISOString());
-		}
+	let storedStartTime = localStorage.getItem("[das]_capStartTime");
+	// Check if startTime is already set, if so, convert it to a Date object
+	if (storedStartTime) {
+		startTime = new Date(storedStartTime);
+	}
 
-		if (!startTime) {
-			return;
-		}
-
-		let currentTime = new Date();
-		let timeDiff = currentTime.getTime() - startTime.getTime();
-		let timeDiffInHours = Math.abs(timeDiff) / (1000 * 60 * 60);
-
-		if (timeDiffInHours >= 3) {
-			await resetCounts();
-		}
-	} else {
-		return;
+	let currentTime = new Date();
+	// If startTime is not set or it has been more than 3 hours, reset startTime
+	if (!startTime || Math.abs(currentTime - startTime) / (1000 * 60 * 60) >= 3) {
+		startTime = currentTime;
+		localStorage.setItem("[das]_capStartTime", startTime.toISOString());
+		await resetCounts();
 	}
 }
 
